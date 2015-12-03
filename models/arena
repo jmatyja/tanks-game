@@ -1,0 +1,116 @@
+var Arena = function(){
+    var mongoose = require('mongoose');
+    var randoms = require('../lib/randoms');
+    var user = require('./user');
+    var LocationSchema = new mongoose.Schema({
+        type: Number,
+        x: Number,
+        y: Number,
+        sectorX: Number,
+        sectorY: Number,
+        sector: String,
+        width: Number,
+        height: Number,
+        column: Number,
+        row: Number,
+        sprite: String,
+        loc: {
+            type: [Number],
+            index: '2d'
+        },
+        userId: String
+    });
+    var ARENA_CONST = {
+        TILE: 1
+    };
+    var LocationModel = mongoose.model('Location', LocationSchema);
+    var divideNumber = 1000000;
+    var TILE_SIZE = 32;
+    var getCoordinate = function(coordinate){
+        return coordinate/divideNumber;
+    }
+    var findInSquare = function(y1, x1, y2, x2, callback){
+        LocationModel.find( { loc :
+            { $geoWithin :
+                { $box : [ [ y1 , x1 ] ,
+                         [ y2 , x2 ] ]
+                } } })
+            .sort({column: 1, row: 1})
+            .select( {"type": 1, "row": 1, "column": 1, "x": 1, "y":1, "sprite": 1, "_id": 0, "width": 1, "height": 1})
+            .exec(function(err, result){
+                callback( result);
+            });
+    }
+    var findBySectors = function(sectors, callback){
+        LocationModel.find({sector: { "$in" : sectors}})
+            .sort({column:1, row:1})
+            .select({"type": 1, "row": 1, "column": 1, "x": 1, "y":1, "sprite": 1, "_id": 1, "width": 1, "height": 1})
+            .exec(function(err, result){
+                callback( result);
+            });
+    }
+    var addLocation = function(obj, callbackj){
+        var location = new LocationModel(
+            {
+                type: obj.type,
+                x: obj.x,
+                y: obj.y,
+                sectorX: obj.sectorX,
+                sectorY:  obj.sectorY,
+                sector: obj.sector,
+                width: obj.width,
+                height: obj.height,
+                column: obj.column,
+                row: obj.row,
+                sprite: obj.sprite,
+                loc: [getCoordinate(obj.x), getCoordinate(obj.y)],
+                userId: '0'
+            }
+        );
+        location.save(function(err){
+            callbackj();
+            if(err){
+                console.log(err);
+                throw new Exception('error');
+            }
+
+        });
+    }
+    var generateArenaData = function(cols, rows, width, height, callback){
+        var retValues = [];
+        for(var i=0; i <= cols; i++){
+            for( var j = 0; j<=rows; j++){
+                retValues.push({column: i, row: j, x: getCoordinate(j * width), y: getCoordinate(i * height), type: randoms.distribute([20,1])});
+            }
+        }
+        callback(retValues);
+    }
+    var getArena = function(y1, x1, y2, x2, callback){
+        findInSquare(getCoordinate(y1), getCoordinate(x1), getCoordinate(y2), getCoordinate(x2),function(data){
+            callback(data);
+        });
+    }
+
+    var getAvailableUserHomeLocation = function(callback){
+        LocationModel.findOne({type:5, userId:'0'}).exec(function(error, result){
+            callback(result);
+        })
+    }
+    var findById = function(id, callback){
+        LocationModel.findOne({_id: id}, function(error, location){
+            callback(location);
+        })
+    }
+    return {
+        locationModel: LocationModel,
+        findInSquare: findInSquare,
+        addLocation: addLocation,
+        generateArenaData: generateArenaData,
+        getArena: getArena,
+        getArenaBySectors: findBySectors,
+        schema: LocationSchema,
+        getAvailableUserLocation: getAvailableUserHomeLocation,
+        findById: findById
+    }
+}();
+module.exports = Arena;
